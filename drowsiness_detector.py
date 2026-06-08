@@ -48,7 +48,11 @@ class Config:
         self.perclos_window_seconds = 60
         
         # MAR Parameters
+<<<<<<< HEAD
         self.mar_threshold = 0.50
+=======
+        self.mar_threshold = 0.70
+>>>>>>> 031d3a6 (my first upload)
         self.mar_consec_seconds = 1.0
         
         # Head Pose Parameters
@@ -56,9 +60,12 @@ class Config:
         self.pitch_alert_deg = 30.0
         self.roll_alert_deg = 20.0
         
+<<<<<<< HEAD
         # Liveness / Anti-Spoofing
         self.liveness_timeout_seconds = 20.0
         
+=======
+>>>>>>> 031d3a6 (my first upload)
         # Alert Parameters
         self.alarm_repeat_interval = 2.0
         self.mute_alarm = False
@@ -131,7 +138,10 @@ class ConfigPanel(threading.Thread):
         self._create_slider("Nod Pitch Amp (deg)", "nod_pitch_amplitude_deg", 5, 40, 1)
         self._create_slider("Pitch Alert (deg)", "pitch_alert_deg", 5, 60, 1)
         self._create_slider("Roll Alert (deg)", "roll_alert_deg", 5, 60, 1)
+<<<<<<< HEAD
         self._create_slider("Liveness Timeout (s)", "liveness_timeout_seconds", 5, 300, 5)
+=======
+>>>>>>> 031d3a6 (my first upload)
         self._create_slider("Alarm Interval (s)", "alarm_repeat_interval", 1.0, 10.0, 0.5)
 
         # Mute Checkbox
@@ -256,6 +266,7 @@ class MARCalculator:
 
     @staticmethod
     def calculate_mar(landmarks: np.ndarray, h: int, w: int) -> float:
+<<<<<<< HEAD
         """Computes MAR focused on vertical enlargement."""
         pts = lambda idx: (landmarks[idx][0] * w, landmarks[idx][1] * h)
         
@@ -271,6 +282,15 @@ class MARCalculator:
         
         # Return ratio of vertical opening to stable eye distance
         return sum(v_dists) / (2.0 * eye_ref_dist)
+=======
+        """Computes 6-point MAR."""
+        pts = lambda idx: (landmarks[idx][0] * w, landmarks[idx][1] * h)
+        
+        v_dists = [dist.euclidean(pts(p[0]), pts(p[1])) for p in MARCalculator.VERTICAL_PAIRS]
+        h_dist = dist.euclidean(pts(MARCalculator.HORIZONTAL_PAIR[0]), pts(MARCalculator.HORIZONTAL_PAIR[1]))
+        
+        return sum(v_dists) / (2.0 * h_dist)
+>>>>>>> 031d3a6 (my first upload)
 
 class HeadPoseEstimator:
     """Estimates Euler angles and detects nodding."""
@@ -351,6 +371,7 @@ class HeadPoseEstimator:
         
         return reversals >= 2
 
+<<<<<<< HEAD
 class LivenessTracker:
     """Detects lack of relative facial motion (blinking) to prevent spoofing."""
     def __init__(self):
@@ -376,6 +397,8 @@ class LivenessTracker:
             # A photo is perfectly static.
             return curr_time - self.last_transition_time
 
+=======
+>>>>>>> 031d3a6 (my first upload)
 class AlertManager:
     """Manages visual and audible alerts with hysteresis."""
     def __init__(self, beep_file="beep.wav"):
@@ -505,7 +528,10 @@ def main():
     extractor = FaceLandmarkExtractor()
     perclos_tracker = PERCLOSTracker()
     pose_estimator = HeadPoseEstimator(640, 480)
+<<<<<<< HEAD
     liveness_tracker = LivenessTracker() 
+=======
+>>>>>>> 031d3a6 (my first upload)
     alert_manager = AlertManager()
     
     # Timing
@@ -622,6 +648,7 @@ def main():
                 else:
                     pitch_consec_start = 0 # Reset pitch if eyes open
 
+<<<<<<< HEAD
                 # 5. Liveness Detection (Anti-Spoofing)
                 # Detection: If the eye state (Open/Closed) hasn't changed recently.
                 # A photo never blinks. A real person blinks every few seconds.
@@ -630,6 +657,8 @@ def main():
                 if still_duration > config.get("liveness_timeout_seconds"):
                     causes.append(f"NO BLINK ({int(still_duration)}s)")
 
+=======
+>>>>>>> 031d3a6 (my first upload)
             # Handle Alerts
             alert_manager.handle(causes, curr_time)
             
