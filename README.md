@@ -1,4 +1,4 @@
-# Driver-Drowsiness-Detection-System-
+
 # Driver Drowsiness Detection System 🚗💤
 
 A professional-grade, real-time Python prototype for monitoring driver fatigue and alertness using computer vision. This system uses its own webcam to analyze facial landmarks and detect signs of drowsiness, yawning, and lack of attention.
