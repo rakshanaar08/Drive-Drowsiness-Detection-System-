@@ -28,7 +28,7 @@ Ensure you have Python 3.10+ installed (Python 3.12 is fully supported).
 
 ### 2. Install Dependencies
 ```bash
-pip install opencv-python mediapipe numpy scipy pygame
+pip install -r requirements.txt
 ```
 
 ### 3. Setup Model
