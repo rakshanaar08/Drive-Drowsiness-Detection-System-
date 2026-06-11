@@ -4,6 +4,13 @@
 # NOTE:     On first launch, sit in normal driving posture, keep eyes 
 #           open during the 5-second calibration countdown.
 
+import os
+import sys
+
+# Suppress pygame and SDL2 warnings before importing anything that uses SDL2
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
+os.environ['SDL_AUDIODRIVER'] = 'dummy' if sys.platform == 'darwin' else ''
+
 import cv2
 import mediapipe as mp
 from mediapipe.tasks import python
@@ -17,21 +24,19 @@ from tkinter import ttk
 import pygame
 import wave
 import struct
-import os
 import argparse
 import platform
 from collections import deque
 from scipy.spatial import distance as dist
 from typing import List, Tuple, Optional
 
-# Conditional Windows imports
+# Conditional platform-specific imports
+winsound = None
 if platform.system() == "Windows":
     try:
         import winsound
     except ImportError:
         winsound = None
-else:
-    winsound = None
 
 # --- CONFIGURATION & SHARED STATE ---
 
@@ -95,14 +100,17 @@ def generate_beep(filename="beep.wav", frequency=440, duration=0.5):
     if os.path.exists(filename):
         return
 
-    with wave.open(filename, 'w') as f:
-        f.setnchannels(1)
-        f.setsampwidth(2)
-        f.setframerate(sample_rate)
-        for i in range(num_samples):
-            value = int(32767.0 * 0.5 * np.sin(2.0 * np.pi * frequency * i / sample_rate))
-            data = struct.pack('<h', value)
-            f.writeframesraw(data)
+    try:
+        with wave.open(filename, 'w') as f:
+            f.setnchannels(1)
+            f.setsampwidth(2)
+            f.setframerate(sample_rate)
+            for i in range(num_samples):
+                value = int(32767.0 * 0.5 * np.sin(2.0 * np.pi * frequency * i / sample_rate))
+                data = struct.pack('<h', value)
+                f.writeframesraw(data)
+    except Exception as e:
+        print(f"Warning: Failed to generate beep file: {e}")
 
 # --- MODULES ---
 
@@ -377,12 +385,22 @@ class LivenessTracker:
 class AlertManager:
     """Manages visual and audible alerts with hysteresis."""
     def __init__(self, beep_file="beep.wav"):
-        pygame.mixer.init()
-        try:
-            self.beep_sound = pygame.mixer.Sound(beep_file)
-        except:
-            print("Warning: Pygame audio failed. Using system fallback.")
-            self.beep_sound = None
+        self.beep_sound = None
+        self.system = platform.system()
+        
+        # Only initialize pygame mixer on non-macOS and only if audio file exists
+        if self.system != "Darwin" and os.path.exists(beep_file):
+            try:
+                # REMOVED the redundant 'import os' from here
+                # Suppress pygame debug output
+                os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
+                pygame.mixer.init()
+                self.beep_sound = pygame.mixer.Sound(beep_file)
+            except Exception as e:
+                print(f"Warning: Pygame audio init failed: {e}")
+        elif self.system == "Darwin" and os.path.exists(beep_file):
+            # On macOS, use afplay command line tool instead
+            self.beep_sound = beep_file
             
         self.alert_active = False
         self.last_trigger_time = 0
@@ -399,11 +417,7 @@ class AlertManager:
             repeat_interval = config.get("alarm_repeat_interval")
             if not config.get("mute_alarm"):
                 if current_time - self.last_beep_time > repeat_interval:
-                    if self.beep_sound:
-                        self.beep_sound.play()
-                    elif winsound:
-                        # Fallback for Windows
-                        threading.Thread(target=winsound.Beep, args=(440, 500), daemon=True).start()
+                    self._play_sound()
                     self.last_beep_time = current_time
         else:
             # Hysteresis: clear alert only after cooldown
@@ -412,6 +426,28 @@ class AlertManager:
                 self.alert_active = False
                 self.alert_causes = []
 
+    def _play_sound(self):
+        """Play sound using platform-specific method."""
+        try:
+            if self.system == "Darwin":  # macOS
+                if isinstance(self.beep_sound, str) and os.path.exists(self.beep_sound):
+                    os.system(f"afplay '{self.beep_sound}' &")
+            elif self.system == "Windows":
+                if winsound:
+                    winsound.Beep(440, 500)
+                elif isinstance(self.beep_sound, str) and os.path.exists(self.beep_sound):
+                    os.system(f'start "" "{self.beep_sound}"')
+            else:  # Linux and others
+                if isinstance(self.beep_sound, str) and os.path.exists(self.beep_sound):
+                    os.system(f"aplay '{self.beep_sound}' &")
+                else:
+                    os.system("paplay /usr/share/sounds/freedesktop/stereo/complete.oga &")
+            # Fallback to pygame if available
+            if hasattr(self.beep_sound, 'play'):
+                self.beep_sound.play()
+        except Exception as e:
+            print(f"Warning: Failed to play sound: {e}")
+    
     def draw_alert(self, frame):
         if self.alert_active:
             h, w = frame.shape[:2]
@@ -488,11 +524,22 @@ def main():
     generate_beep()
     
     # 2. Config Panel
-    if not args.no_gui:
-        panel = ConfigPanel()
-        panel.start()
+    # macOS Tkinter requires main thread - disable GUI by default on macOS
+    system = platform.system()
+    enable_gui = not args.no_gui and system != "Darwin"
+    
+    if enable_gui:
+        try:
+            panel = ConfigPanel()
+            panel.start()
+        except Exception as e:
+            print(f"Warning: GUI initialization failed: {e}")
+            print("Continuing without GUI. Using default thresholds.")
     else:
-        print("Running in NO-GUI mode. Using default thresholds.")
+        if args.no_gui:
+            print("Running in NO-GUI mode. Using default thresholds.")
+        else:
+            print("GUI disabled on macOS (Tkinter threading limitation). Using default thresholds.")
     
     # 3. Video Capture
     cap = cv2.VideoCapture(0)
@@ -661,10 +708,15 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
-    pygame.quit()
+    try:
+        pygame.quit()
+    except:
+        pass
     if os.path.exists("beep.wav"):
-        try: os.remove("beep.wav")
-        except: pass
+        try:
+            os.remove("beep.wav")
+        except:
+            pass
 
 if __name__ == "__main__":
     main()
